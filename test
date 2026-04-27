@@ -674,6 +674,9 @@ function lookupFieldCI(event, name) {
 }
 
 function evalCmp(event, n) {
+  // List references (Logpoint `field IN LIST_NAME` / `field NOT IN LIST_NAME`):
+  // playground can't resolve the list contents, so we treat both as always-true.
+  if (n.op === '__listref' || n.op === '__listref_not') return true;
   const actual = lookupFieldCI(event, n.field);
   if (n.op === 'exists') return actual !== undefined && actual !== null && actual !== '';
   if (actual === undefined || actual === null) return false;
@@ -1007,6 +1010,7 @@ function parseHaving(str) {
    ═══════════════════════════════════════════════════════════ */
 const SPL_RULES = [
   { name: 'WS',    re: /\s+/ },
+  { name: 'COMMENT', re: /\/\*[\s\S]*?\*\/|\/\/[^\n]*/ },
   { name: 'PIPE',  re: /\|/ },
   { name: 'LP',    re: /\(/ },
   { name: 'RP',    re: /\)/ },
@@ -1145,7 +1149,8 @@ function parseSPLStats(tokens) {
    ═══════════════════════════════════════════════════════════ */
 const KQL_RULES = [
   { name: 'WS',      re: /\s+/ },
-  { name: 'COMMENT', re: /\/\/[^\n]*/ },
+  { name: 'COMMENT', re: /\/\*[\s\S]*?\*\/|\/\/[^\n]*/ },
+  { name: 'COMMENT', re: /\/\*[\s\S]*?\*\/|\/\/[^\n]*/ },
   { name: 'PIPE',    re: /\|/ },
   { name: 'LP',      re: /\(/ },
   { name: 'RP',      re: /\)/ },
@@ -1977,6 +1982,7 @@ function parseXQLExpr(tokens) {
    ═══════════════════════════════════════════════════════════ */
 const LP_RULES = [
   { name: 'WS',    re: /\s+/ },
+  { name: 'COMMENT', re: /\/\*[\s\S]*?\*\/|\/\/[^\n]*/ },
   { name: 'PIPE',  re: /\|/ },
   { name: 'LP',    re: /\(/ },
   { name: 'RP',    re: /\)/ },
@@ -1991,9 +1997,15 @@ const LP_RULES = [
   { name: 'WORD',  re: /[A-Za-z_\*][\w\*\-\.]*|\d+(?:\.\d+)?/ },
 ];
 function parseLogpoint(text) {
+  // JSON/JSON5 wrapper: Logpoint alert rules are often exported as JSON objects
+  // with `query` (and optionally `exception`) string fields. Auto-unwrap.
+  const unwrapped = unwrapLogpointJson(text);
+  text = unwrapped.query;
+  const exceptionText = unwrapped.exception;
+
   const toks = tokenize(text, LP_RULES);
   const stages = splitPipes(toks);
-  const base = parseLPBase(stages[0]);
+  let base = parseLPBase(stages[0]);
   let agg = null;
   for (let i = 1; i < stages.length; i++) {
     const st = stages[i];
@@ -2008,8 +2020,45 @@ function parseLogpoint(text) {
       }
     }
   }
+
+  // Apply optional exception (whitelist) — events matching exception are excluded
+  if (exceptionText) {
+    const excToks = tokenize(exceptionText, LP_RULES);
+    const excStages = splitPipes(excToks);
+    if (excStages.length && excStages[0].length) {
+      const excAst = parseLPBase(excStages[0]);
+      base = { type: 'and', left: base, right: { type: 'not', child: excAst } };
+    }
+  }
   return { base, agg };
 }
+
+/* If `text` is a JSON or JSON5 alert-rule wrapper with a `query` field,
+   return { query: <unescaped string>, exception: <string or null>, meta: {…} }.
+   Otherwise return { query: text, exception: null }. */
+function unwrapLogpointJson(text) {
+  if (!text) return { query: '', exception: null };
+  const trimmed = text.trim();
+  // Quick heuristic: must start with `{` and contain a `query` field
+  if (!trimmed.startsWith('{') || !/["']?query["']?\s*:/.test(trimmed)) {
+    return { query: text, exception: null };
+  }
+  // Try strict JSON first, then JSON5 (which allows comments, single quotes, trailing commas)
+  let obj = null;
+  try { obj = JSON.parse(trimmed); }
+  catch {
+    try { if (typeof JSON5 !== 'undefined') obj = JSON5.parse(trimmed); } catch {}
+  }
+  if (!obj || typeof obj !== 'object' || typeof obj.query !== 'string' || !obj.query.trim()) {
+    return { query: text, exception: null };
+  }
+  return {
+    query: obj.query,
+    exception: typeof obj.exception === 'string' && obj.exception.trim() ? obj.exception : null,
+    meta: obj,
+  };
+}
+
 function parseLPBase(tokens) {
   let pos = 0;
   const peek = () => tokens[pos];
@@ -2039,6 +2088,25 @@ function parseLPBase(tokens) {
     if (accept('LP')) { const n = parseOr(); if (!accept('RP')) throw new Error('missing )'); return n; }
     const t = peek();
     if (!t) return { type: 'const', value: true };
+    // `field IN LIST_NAME` or `field NOT IN LIST_NAME`
+    if (t.name === 'WORD' && tokens[pos+1]) {
+      const t1 = tokens[pos+1];
+      // pattern: WORD IN WORD (where IN is a WORD token with value "IN")
+      if (t1.name === 'WORD' && t1.value.toUpperCase() === 'IN' && tokens[pos+2] && tokens[pos+2].name === 'WORD') {
+        const field = t.value;
+        const listName = tokens[pos+2].value;
+        pos += 3;
+        return { type: 'cmp', field, op: '__listref', values: [listName], listRef: listName };
+      }
+      // pattern: WORD NOT IN WORD (NOT is its own token type, IN is WORD)
+      if (t1.name === 'NOT' && tokens[pos+2] && tokens[pos+2].name === 'WORD' &&
+          tokens[pos+2].value.toUpperCase() === 'IN' && tokens[pos+3] && tokens[pos+3].name === 'WORD') {
+        const field = t.value;
+        const listName = tokens[pos+3].value;
+        pos += 4;
+        return { type: 'cmp', field, op: '__listref_not', values: [listName], listRef: listName };
+      }
+    }
     if (t.name === 'WORD' && tokens[pos+1] && (tokens[pos+1].name === 'EQ' || tokens[pos+1].name === 'OP')) {
       const field = t.value;
       const op = tokens[pos+1];
@@ -3121,6 +3189,8 @@ function astToLuceneStr(node) {
 }
 function cmpToLucene(n) {
   const f = n.field;
+  if (n.op === '__listref')      return f + ':*  /* IN ' + (n.listRef || '?') + ' (list contents not available) */';
+  if (n.op === '__listref_not')  return f + ':*  /* NOT IN ' + (n.listRef || '?') + ' (list contents not available) */';
   if (n.op === 'exists') return f + ':*';
   const vals = n.values || [];
   const parts = vals.map(v => {
@@ -3176,6 +3246,8 @@ function astToSPLStr(node) {
 }
 function cmpToSPL(n) {
   const f = n.field;
+  if (n.op === '__listref')      return f + '=*  /* IN ' + (n.listRef || '?') + ' */';
+  if (n.op === '__listref_not')  return 'NOT ' + f + '=*  /* NOT IN ' + (n.listRef || '?') + ' */';
   if (n.op === 'exists') return f + '=*';
   const vals = n.values || [];
   const parts = vals.map(v => {
@@ -3293,6 +3365,8 @@ function astToKQLStr(node) {
 }
 function cmpToKQL(n) {
   const f = n.field;
+  if (n.op === '__listref')      return 'isnotempty(' + f + ') /* IN ' + (n.listRef || '?') + ', list contents not available */';
+  if (n.op === '__listref_not')  return 'true /* ' + f + ' NOT IN ' + (n.listRef || '?') + ', list contents not available */';
   if (n.op === 'exists') return `isnotempty(${f})`;
   const vals = n.values || [];
   const parts = vals.map(v => {
@@ -3399,6 +3473,8 @@ function astToXQLStr(node) {
 }
 function cmpToXQL(n) {
   const f = n.field;
+  if (n.op === '__listref')      return f + ' != null  /* IN ' + (n.listRef || '?') + ' (list contents not available) */';
+  if (n.op === '__listref_not')  return 'true /* ' + f + ' NOT IN ' + (n.listRef || '?') + ' */';
   if (n.op === 'exists') return `${f} != null`;
   const vals = n.values || [];
   const parts = vals.map(v => {
@@ -3498,6 +3574,8 @@ function astToLPStr(node) {
 }
 function cmpToLP(n) {
   const f = n.field;
+  if (n.op === '__listref')      return f + ' IN ' + (n.listRef || '?');
+  if (n.op === '__listref_not')  return f + ' NOT IN ' + (n.listRef || '?');
   if (n.op === 'exists') return `${f}=*`;
   const vals = n.values || [];
   const parts = vals.map(v => {
@@ -3692,6 +3770,11 @@ function decomposeForSigma(node) {
       return;
     }
     if (n.type === 'cmp') {
+      // List references can't be expressed in Sigma — skip with a note
+      if (n.op === '__listref' || n.op === '__listref_not') {
+        notes.push('List reference "' + (n.listRef || '?') + '" on ' + n.field + ' (' + (n.op === '__listref' ? 'IN' : 'NOT IN') + ') - resolve manually in target SIEM');
+        return;
+      }
       // Skip __fn: tagged values - they're time/calculation functions
       const vals = (n.values || []).filter(v => !String(v).startsWith('__fn:'));
       if (!vals.length) {
@@ -4323,6 +4406,8 @@ function detectRuleLangHint(text) {
   }
   // BIOC YAML wrapper with query: |  → treat as XQL since we auto-unwrap
   if (/^\s*query\s*:\s*[|>]/m.test(t)) return 'xql';
+  // Logpoint JSON/JSON5 alert rule: starts with `{` and has a "query" field
+  if (t.startsWith('{') && /["']?query["']?\s*:\s*["']/.test(t)) return 'logpoint';
   // XQL: starts with "dataset =", "config", or "preset ="
   if (/^\s*(dataset|preset|config)\s*[=]?/i.test(t.split('\n')[0])) return 'xql';
   // KQL: pipe-prefixed `where`/`summarize`/`extend` early in the query
