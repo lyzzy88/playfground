@@ -1986,6 +1986,8 @@ const LP_RULES = [
   { name: 'PIPE',  re: /\|/ },
   { name: 'LP',    re: /\(/ },
   { name: 'RP',    re: /\)/ },
+  { name: 'LBRK',  re: /\[/ },     /* PATCHED: Logpoint source/label scope */
+  { name: 'RBRK',  re: /\]/ },     /* PATCHED */
   { name: 'COMMA', re: /,/ },
   { name: 'STR',   re: /"(?:\\.|[^"])*"/ },
   { name: 'AND',   re: /\bAND\b/ },
@@ -2037,24 +2039,35 @@ function parseLogpoint(text) {
    return { query: <unescaped string>, exception: <string or null>, meta: {…} }.
    Otherwise return { query: text, exception: null }. */
 function unwrapLogpointJson(text) {
+  // PATCHED: supports nested .query (e.g. { rule: { query: "..." } })
   if (!text) return { query: '', exception: null };
   const trimmed = text.trim();
-  // Quick heuristic: must start with `{` and contain a `query` field
   if (!trimmed.startsWith('{') || !/["']?query["']?\s*:/.test(trimmed)) {
     return { query: text, exception: null };
   }
-  // Try strict JSON first, then JSON5 (which allows comments, single quotes, trailing commas)
   let obj = null;
   try { obj = JSON.parse(trimmed); }
   catch {
     try { if (typeof JSON5 !== 'undefined') obj = JSON5.parse(trimmed); } catch {}
   }
-  if (!obj || typeof obj !== 'object' || typeof obj.query !== 'string' || !obj.query.trim()) {
+  if (!obj || typeof obj !== 'object') {
     return { query: text, exception: null };
   }
+  // Priority walk: top-level → rule → alert → detection → BFS
+  const queue = [], seen = new Set();
+  const enq = o => { if (o && typeof o === 'object' && !Array.isArray(o) && !seen.has(o)) { seen.add(o); queue.push(o); } };
+  enq(obj);
+  ['rule','alert','detection','data','spec'].forEach(k => enq(obj[k]));
+  let safety = 0, found = null;
+  while (queue.length && safety++ < 200) {
+    const cur = queue.shift();
+    if (typeof cur.query === 'string' && cur.query.trim()) { found = cur; break; }
+    for (const v of Object.values(cur)) if (v && typeof v === 'object' && !Array.isArray(v)) enq(v);
+  }
+  if (!found) return { query: text, exception: null };
   return {
-    query: obj.query,
-    exception: typeof obj.exception === 'string' && obj.exception.trim() ? obj.exception : null,
+    query: found.query,
+    exception: typeof found.exception === 'string' && found.exception.trim() ? found.exception : null,
     meta: obj,
   };
 }
@@ -2070,7 +2083,7 @@ function parseLPBase(tokens) {
     while (true) {
       if (accept('AND')) { L = { type: 'and', left: L, right: parseUn() }; continue; }
       const t = peek();
-      if (t && (t.name === 'LP' || t.name === 'NOT' || t.name === 'MINUS' || t.name === 'WORD' || t.name === 'STR')) {
+      if (t && (t.name === 'LP' || t.name === 'LBRK' || t.name === 'NOT' || t.name === 'MINUS' || t.name === 'WORD' || t.name === 'STR')) {  /* PATCHED: LBRK */
         const R = parseUn();
         L = { type: 'and', left: L, right: R };
         continue;
@@ -2086,6 +2099,7 @@ function parseLPBase(tokens) {
   }
   function parseTerm() {
     if (accept('LP')) { const n = parseOr(); if (!accept('RP')) throw new Error('missing )'); return n; }
+    if (accept('LBRK')) { const n = parseOr(); if (!accept('RBRK')) throw new Error('missing ]'); return n; }  /* PATCHED: [ ... ] */
     const t = peek();
     if (!t) return { type: 'const', value: true };
     // `field IN LIST_NAME` or `field NOT IN LIST_NAME`
